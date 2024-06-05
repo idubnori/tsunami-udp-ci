@@ -1,0 +1,89 @@
+name: Build Tsunami-UDP
+
+on: 
+  push:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-13, macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    outputs:
+      commit_sha: ${{ steps.suffix.outputs.commit_sha }}
+    env:
+      work-dir: tsunami-udp
+
+    steps:
+    - name: git clone
+      run: |
+        git clone https://git.code.sf.net/p/tsunami-udp/code_git .
+
+    - name: macos specific
+      if: contains(matrix.os, 'macos')
+      run: |
+        brew install make autoconf automake
+
+        # code fix for macos
+        # ref. https://qiita.com/comware_naito/items/bf3c9ef4fedb08a4b527#%E3%83%93%E3%83%AB%E3%83%89%E3%81%A8%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB
+        sed -i .bak -e '141s:^:\/\/ :' -e '143s:^:\/\/ :' ./include/tsunami.h
+        sed -i .bak -e '149,162s:^:\/\/ :' -e '194,197s:^:\/\/ :' ./common/common.c
+      working-directory: ${{ env.work-dir }}
+
+    - name: Build
+      run: |
+        ./recompile.sh
+        make install
+      working-directory: ${{ env.work-dir }}
+
+    - name: artifacts suffix
+      id: suffix
+      run: |
+        branch_name=$(git rev-parse --abbrev-ref HEAD)
+        commit_sha=$(git rev-parse --short=6 HEAD)
+        runner_os="${{ runner.os }}"
+        runner_arch="${{ runner.arch }}"
+        suffix=$(echo "${branch_name}_${commit_sha}_${runner_os}_${runner_arch}" | tr '[:upper:]' '[:lower:]')
+        echo "suffix=$suffix" >> $GITHUB_OUTPUT
+        echo "commit_sha=$commit_sha" >> $GITHUB_OUTPUT
+
+    - name: Artifcats
+      run: |
+        zip "/tmp/tsunami-udp_${{ steps.suffix.outputs.suffix }}.zip" /usr/local/bin/*tsunami*
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: tsunami-udp_${{ steps.suffix.outputs.suffix }}
+        path: /tmp/tsunami-udp_${{ steps.suffix.outputs.suffix }}.zip
+
+  release:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/dist
+      - name: tag
+        id: tag
+        run: |
+          CURRENT_DATE=$(date +'%Y%m%d')
+          RUNNER_NUMBER=${{ github.run_number }}
+          TAG="${{ needs.build.outputs.commit_sha }}.${CURRENT_DATE}.${RUNNER_NUMBER}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.tag.outputs.tag }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: |
+            /tmp/dist/**/*.zip
+          draft: true
+          prerelease: false
+        # env:
+        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
