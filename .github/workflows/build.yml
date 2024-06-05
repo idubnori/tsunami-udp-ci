@@ -50,7 +50,7 @@ jobs:
 
     - name: Artifcats
       run: |
-        zip "/tmp/tsunami-udp_${{ steps.suffix.outputs.suffix }}.zip" /usr/local/bin/*tsunami*
+        zip -j "/tmp/tsunami-udp_${{ steps.suffix.outputs.suffix }}.zip" /usr/local/bin/*tsunami*
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -85,6 +85,4 @@ jobs:
             /tmp/dist/**/*.zip
           draft: true
           prerelease: false
-        # env:
-        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
