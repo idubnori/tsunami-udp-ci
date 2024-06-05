@@ -2,6 +2,7 @@ name: Build Tsunami-UDP
 
 on: 
   push:
+  workflow_dispatch:
 
 jobs:
   build:
